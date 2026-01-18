@@ -3,17 +3,13 @@ import subprocess
 from datetime import datetime
 
 STOP_ID = "R36N"
-ROUTE = "N"
+ROUTES = ["N", "W"]
 
-def handler(event, context):
-    if not os.environ.get("MTA_API_KEY"):
-        raise Exception("MTA_API_KEY not set")
-
-    # Ask underground for epoch timestamps (seconds since Unix epoch)
+def run_underground(route):
     cmd = [
         "underground",
         "stops",
-        ROUTE,
+        route,
         "--format",
         "epoch"
     ]
@@ -26,37 +22,46 @@ def handler(event, context):
     )
 
     if result.returncode != 0:
-        print("STDERR:", result.stderr)
-        raise Exception("underground command failed")
+        print(f"STDERR ({route}):", result.stderr)
+        raise Exception(f"underground command failed for route {route}")
+
+    return result.stdout.splitlines()
+
+def handler(event, context):
+    if not os.environ.get("MTA_API_KEY"):
+        raise Exception("MTA_API_KEY not set")
 
     now_epoch = int(datetime.utcnow().timestamp())
-    arrivals_min = []
+    arrivals = {}
 
-    for line in result.stdout.splitlines():
-        if not line.startswith(STOP_ID):
-            continue
+    for route in ROUTES:
+        arrivals[route] = []
+        lines = run_underground(route)
 
-        times = line.split()[1:]
-
-        for t in times:
-            try:
-                arrival_epoch = int(t)
-            except ValueError:
+        for line in lines:
+            if not line.startswith(STOP_ID):
                 continue
 
-            delta_min = int((arrival_epoch - now_epoch) / 60)
+            times = line.split()[1:]
 
-            # Keep arrivals from now up to 3 hours out
-            if 0 <= delta_min <= 180:
-                arrivals_min.append(delta_min)
+            for t in times:
+                try:
+                    arrival_epoch = int(t)
+                except ValueError:
+                    continue
 
-    arrivals_min = sorted(arrivals_min)[:4]
+                delta_min = int((arrival_epoch - now_epoch) / 60)
+
+                # Keep arrivals from now to 3 hours out
+                if 0 <= delta_min <= 180:
+                    arrivals[route].append(delta_min)
+
+        arrivals[route] = sorted(arrivals[route])[:4]
 
     response = {
         "station": "Astoria–Ditmars Blvd",
-        "route": ROUTE,
-        "stop_id": STOP_ID,
-        "arrivals_min": arrivals_min,
+        "direction": "southbound",
+        "arrivals": arrivals,
         "generated_at": datetime.utcnow().isoformat() + "Z"
     }
 
