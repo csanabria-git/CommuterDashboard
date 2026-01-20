@@ -2,7 +2,7 @@ import os
 import subprocess
 from datetime import datetime
 
-STOP_ID = "R36N"
+STOP_ID = "R01S"
 ROUTES = ["N", "W"]
 
 def run_underground(route):
