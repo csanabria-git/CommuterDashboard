@@ -6,3 +6,7 @@ variable "mta_api_key" {
   type      = string
   sensitive = true
 }
+variable "mta_bustime_api_key" {
+  type      = string
+  sensitive = true
+}
