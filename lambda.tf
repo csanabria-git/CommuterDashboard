@@ -16,3 +16,10 @@ image_uri = "864981741904.dkr.ecr.us-east-1.amazonaws.com/commuter-dashboard-und
     }
   }
 }
+resource "aws_lambda_permission" "apigw" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.underground_container.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.commuter_api.execution_arn}/*/*"
+}
