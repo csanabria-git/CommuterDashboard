@@ -9,18 +9,17 @@ from datetime import datetime, timezone
 STATION_NAME = "Astoria–Ditmars Blvd"
 DIRECTION = "southbound"
 
-# Subway configuration (UNCHANGED)
+# Subway configuration
 SUBWAY_STOP_ID = "R01S"
 SUBWAY_ROUTES = ["N", "W"]
 
-# Bus configuration (NEW)
+# Bus configuration
 BUS_ROUTE = "Q69"
 BUS_STOP_ID = "550714"
 BUSTIME_URL = "https://bustime.mta.info/api/siri/stop-monitoring.json"
 
-
 # -------------------------
-# Subway logic (UNCHANGED)
+# Subway logic
 # -------------------------
 def run_underground(route):
     """
@@ -48,9 +47,8 @@ def run_underground(route):
 
     return result.stdout.splitlines()
 
-
 # -------------------------
-# Bus logic (NEW)
+# Bus logic
 # -------------------------
 def get_q69_arrivals(bustime_key, now_epoch):
     params = {
@@ -88,32 +86,31 @@ def get_q69_arrivals(bustime_key, now_epoch):
 
         delta_min = int((arrival_time.timestamp() - now_epoch) / 60)
 
-        # Keep arrivals within next 3 hours
         if 0 <= delta_min <= 180:
             arrivals.append(delta_min)
 
     return sorted(arrivals)[:4]
 
-
 # -------------------------
 # Lambda handler
 # -------------------------
 def handler(event, context):
-    # Subway key (already working, do not change)
+    # Validate environment
     if not os.environ.get("MTA_API_KEY"):
         raise Exception("MTA_API_KEY not set")
 
-    # Bus key (new)
     bustime_key = os.environ.get("MTA_BUSTIME_API_KEY")
     if not bustime_key:
         raise Exception("MTA_BUSTIME_API_KEY not set")
 
     now_epoch = int(datetime.now(timezone.utc).timestamp())
-    arrivals = {}
 
-    # Subway arrivals (UNCHANGED)
+    # -------------------------
+    # Collect subway arrivals (merged + sortable)
+    # -------------------------
+    subway_arrivals = []
+
     for route in SUBWAY_ROUTES:
-        arrivals[route] = []
         lines = run_underground(route)
 
         for line in lines:
@@ -129,17 +126,34 @@ def handler(event, context):
                 delta_min = int((arrival_epoch - now_epoch) / 60)
 
                 if 0 <= delta_min <= 180:
-                    arrivals[route].append(delta_min)
+                    subway_arrivals.append({
+                        "route": route,
+                        "minutes": delta_min
+                    })
 
-        arrivals[route] = sorted(arrivals[route])[:4]
+    # Global sort: what comes next, regardless of route
+    subway_arrivals.sort(key=lambda x: x["minutes"])
 
-    # Bus arrivals (NEW)
-    arrivals[BUS_ROUTE] = get_q69_arrivals(bustime_key, now_epoch)
+    # Keep only the next N arrivals total (across N + W)
+    subway_arrivals = subway_arrivals[:6]
 
+    # -------------------------
+    # Bus arrivals
+    # -------------------------
+    bus_arrivals = get_q69_arrivals(bustime_key, now_epoch)
+
+    # -------------------------
+    # Response
+    # -------------------------
     response = {
         "station": STATION_NAME,
         "direction": DIRECTION,
-        "arrivals": arrivals,
+        "arrivals": {
+            "subway": subway_arrivals,
+            "bus": {
+                BUS_ROUTE: bus_arrivals
+            }
+        },
         "generated_at": datetime.now(timezone.utc)
             .isoformat()
             .replace("+00:00", "Z")
@@ -147,4 +161,3 @@ def handler(event, context):
 
     print(response)
     return response
-
