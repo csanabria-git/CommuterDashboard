@@ -32,13 +32,13 @@ BUS_MONITORS = [
     },
     {
         "key": "M60_503870",
-        "route": "M60",
+        "route": "M60-SBS",
         "stop_id": "503870",
         "limit": 4
     },
     {
         "key": "M60_505254",
-        "route": "M60",
+        "route": "M60-SBS",
         "stop_id": "505254",
         "limit": 4
     },
@@ -91,8 +91,7 @@ def run_underground(route):
 def get_bus_arrivals(bustime_key, route, stop_id, now_epoch, limit=4):
     params = {
         "key": bustime_key,
-        "MonitoringRef": stop_id,
-        "LineRef": route
+        "MonitoringRef": stop_id
     }
 
     resp = requests.get(BUSTIME_URL, params=params, timeout=10)
@@ -110,11 +109,11 @@ def get_bus_arrivals(bustime_key, route, stop_id, now_epoch, limit=4):
 
     for visit in visits:
         vehicle_journey = visit.get("MonitoredVehicleJourney", {})
-        line_ref = vehicle_journey.get("LineRef", "")
+        published_line = vehicle_journey.get("PublishedLineName", "")
         call = vehicle_journey.get("MonitoredCall", {})
 
-        # Guard in case the API returns mixed data
-        if line_ref and line_ref != route:
+        # Match the public-facing route name
+        if published_line != route:
             continue
 
         expected = call.get("ExpectedArrivalTime")
@@ -183,7 +182,7 @@ def handler(event, context):
     subway_arrivals = subway_arrivals[:6]
 
     # -------------------------
-    # Bus arrivals (multiple monitors)
+    # Bus arrivals
     # -------------------------
     bus_arrivals = {}
 
