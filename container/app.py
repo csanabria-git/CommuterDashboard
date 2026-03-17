@@ -13,10 +13,48 @@ DIRECTION = "southbound"
 SUBWAY_STOP_ID = "R01S"
 SUBWAY_ROUTES = ["N", "W"]
 
-# Bus configuration
-BUS_ROUTE = "Q69"
-BUS_STOP_ID = "550714"
+# Bus API
 BUSTIME_URL = "https://bustime.mta.info/api/siri/stop-monitoring.json"
+
+# Bus monitoring configuration
+BUS_MONITORS = [
+    {
+        "key": "Q69_550714",
+        "route": "Q69",
+        "stop_id": "550714",
+        "limit": 4
+    },
+    {
+        "key": "Q69_550706",
+        "route": "Q69",
+        "stop_id": "550706",
+        "limit": 4
+    },
+    {
+        "key": "M60_503870",
+        "route": "M60",
+        "stop_id": "503870",
+        "limit": 4
+    },
+    {
+        "key": "M60_505254",
+        "route": "M60",
+        "stop_id": "505254",
+        "limit": 4
+    },
+    {
+        "key": "Q19_504419",
+        "route": "Q19",
+        "stop_id": "504419",
+        "limit": 4
+    },
+    {
+        "key": "Q19_504418",
+        "route": "Q19",
+        "stop_id": "504418",
+        "limit": 4
+    },
+]
 
 # -------------------------
 # Subway logic
@@ -50,11 +88,11 @@ def run_underground(route):
 # -------------------------
 # Bus logic
 # -------------------------
-def get_q69_arrivals(bustime_key, now_epoch):
+def get_bus_arrivals(bustime_key, route, stop_id, now_epoch, limit=4):
     params = {
         "key": bustime_key,
-        "MonitoringRef": BUS_STOP_ID,
-        "LineRef": BUS_ROUTE
+        "MonitoringRef": stop_id,
+        "LineRef": route
     }
 
     resp = requests.get(BUSTIME_URL, params=params, timeout=10)
@@ -71,25 +109,32 @@ def get_q69_arrivals(bustime_key, now_epoch):
     )
 
     for visit in visits:
-        call = (
-            visit.get("MonitoredVehicleJourney", {})
-                 .get("MonitoredCall", {})
-        )
+        vehicle_journey = visit.get("MonitoredVehicleJourney", {})
+        line_ref = vehicle_journey.get("LineRef", "")
+        call = vehicle_journey.get("MonitoredCall", {})
+
+        # Guard in case the API returns mixed data
+        if line_ref and line_ref != route:
+            continue
 
         expected = call.get("ExpectedArrivalTime")
         if not expected:
             continue
 
-        arrival_time = datetime.fromisoformat(
-            expected.replace("Z", "+00:00")
-        ).astimezone(timezone.utc)
+        try:
+            arrival_time = datetime.fromisoformat(
+                expected.replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+        except Exception:
+            continue
 
         delta_min = int((arrival_time.timestamp() - now_epoch) / 60)
 
         if 0 <= delta_min <= 180:
             arrivals.append(delta_min)
 
-    return sorted(arrivals)[:4]
+    arrivals = sorted(set(arrivals))
+    return arrivals[:limit]
 
 # -------------------------
 # Lambda handler
@@ -138,9 +183,27 @@ def handler(event, context):
     subway_arrivals = subway_arrivals[:6]
 
     # -------------------------
-    # Bus arrivals
+    # Bus arrivals (multiple monitors)
     # -------------------------
-    bus_arrivals = get_q69_arrivals(bustime_key, now_epoch)
+    bus_arrivals = {}
+
+    for monitor in BUS_MONITORS:
+        key = monitor["key"]
+        route = monitor["route"]
+        stop_id = monitor["stop_id"]
+        limit = monitor.get("limit", 4)
+
+        try:
+            bus_arrivals[key] = get_bus_arrivals(
+                bustime_key=bustime_key,
+                route=route,
+                stop_id=stop_id,
+                now_epoch=now_epoch,
+                limit=limit
+            )
+        except Exception as e:
+            print(f"Error getting bus arrivals for {key}: {e}")
+            bus_arrivals[key] = []
 
     # -------------------------
     # Response
@@ -150,9 +213,7 @@ def handler(event, context):
         "direction": DIRECTION,
         "arrivals": {
             "subway": subway_arrivals,
-            "bus": {
-                BUS_ROUTE: bus_arrivals
-            }
+            "bus": bus_arrivals
         },
         "generated_at": datetime.now(timezone.utc)
             .isoformat()
