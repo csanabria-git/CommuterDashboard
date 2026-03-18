@@ -23,3 +23,30 @@ resource "aws_lambda_permission" "apigw" {
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.commuter_api.execution_arn}/*/*"
 }
+
+resource "aws_lambda_function" "service_status_container" {
+  function_name = "commuter-dashboard-service-status"
+  role          = aws_iam_role.lambda_execution.arn
+
+  package_type = "Image"
+  image_uri    = "864981741904.dkr.ecr.us-east-1.amazonaws.com/commuter-dashboard-service-status:0.1.3"
+  publish      = true
+
+  timeout     = 30
+  memory_size = 512
+
+  environment {
+    variables = {
+      MTA_API_KEY          = var.mta_api_key
+      MTA_BUSTIME_API_KEY  = var.mta_bustime_api_key
+    }
+  }
+}
+
+resource "aws_lambda_permission" "apigw_service_status" {
+  statement_id  = "AllowAPIGatewayInvokeServiceStatus"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.service_status_container.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.commuter_api.execution_arn}/*/*"
+}

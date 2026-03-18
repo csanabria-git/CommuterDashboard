@@ -22,3 +22,15 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 }
 
+resource "aws_apigatewayv2_integration" "service_status_lambda" {
+  api_id                 = aws_apigatewayv2_api.commuter_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.service_status_container.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "service_status" {
+  api_id    = aws_apigatewayv2_api.commuter_api.id
+  route_key = "GET /servicestatus"
+  target    = "integrations/${aws_apigatewayv2_integration.service_status_lambda.id}"
+}
