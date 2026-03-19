@@ -29,7 +29,7 @@ resource "aws_lambda_function" "service_status_container" {
   role          = aws_iam_role.lambda_execution.arn
 
   package_type = "Image"
-  image_uri    = "864981741904.dkr.ecr.us-east-1.amazonaws.com/commuter-dashboard-service-status:0.1.3"
+  image_uri    = "864981741904.dkr.ecr.us-east-1.amazonaws.com/commuter-dashboard-service-status:0.1.4"
   publish      = true
 
   timeout     = 30

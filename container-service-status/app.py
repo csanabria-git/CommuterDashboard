@@ -3,7 +3,7 @@ import requests
 from datetime import datetime, timezone
 from google.transit import gtfs_realtime_pb2
 
-SUBWAY_ALERTS_URL = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys/all-alerts"
+SUBWAY_ALERTS_URL = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fall-alerts"
 BUS_ALERTS_URL = "https://gtfsrt.prod.obanyc.com/alerts"
 
 SUBWAY_ROUTES = ["N", "W"]
